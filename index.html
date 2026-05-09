@@ -467,7 +467,6 @@
         { name: "Funny Bone", value: 200 },
         { name: "Charlie Horse", value: 200 },
         { name: "Writer's Cramp", value: 200 },
-        { name: "Ankle Bone Connected to the Knee Bone", value: 200 },
         { name: "Wish Bone", value: 300 },
         { name: "Bread Basket", value: 1000 }
     ];
@@ -636,6 +635,10 @@
         if (game.successfulCards.length === ailments.length) {
             endGame();
         } else {
+            if (checkMercyRule()) {
+                endGame(true);
+                return;
+            }
             nextTurn();
         }
     }
@@ -665,6 +668,11 @@
             document.getElementById('announcement').style.display = 'block';
             document.getElementById('announcement').textContent =
                 `❌ No specialist available! Card returned to bottom of deck.`;
+
+            if (checkMercyRule()) {
+                endGame(true);
+                return;
+            }
         }
     }
 
@@ -687,6 +695,10 @@
         if (game.successfulCards.length === ailments.length) {
             endGame();
         } else {
+            if (checkMercyRule()) {
+                endGame(true);
+                return;
+            }
             nextTurn();
         }
     }
@@ -716,7 +728,7 @@
         updateDisplay();
     }
 
-    function endGame() {
+    function endGame(isMercyRule = false) {
         stopCountdownMusic();
         stopTimer();
         playCheerSound();
@@ -734,11 +746,44 @@
             .join('');
 
         document.getElementById('finalStandings').innerHTML = standingsHtml;
-        document.getElementById('winnerBadge').textContent =
-            `🏆 ${winner.name} Wins! 🏆\n$${winner.money}`;
+        document.getElementById('winnerBadge').textContent = isMercyRule
+            ? `🏆 ${winner.name} Wins by Mathematical Mercy Rule! 🏆\n$${winner.money}`
+            : `🏆 ${winner.name} Wins! 🏆\n$${winner.money}`;
 
         document.getElementById('gameplayScreen').classList.remove('active');
         document.getElementById('gameOverScreen').classList.add('active');
+    }
+
+    function checkMercyRule() {
+        if (!game.players.length) {
+            return false;
+        }
+
+        const leader = game.players.reduce((best, player) => {
+            return game.banks[player] > game.banks[best] ? player : best;
+        }, game.players[0]);
+
+        const leaderScore = game.banks[leader];
+        const successfulNames = new Set(game.successfulCards.map(card => card.name));
+        const remaining = ailments.filter(card => !successfulNames.has(card.name));
+        const remainingTotal = remaining.reduce((sum, card) => sum + card.value, 0);
+
+        for (const player of game.players) {
+            if (player === leader) {
+                continue;
+            }
+            const specialistCards = game.specialistCards[player] || [];
+            const specialistNames = new Set(specialistCards.map(card => card.name));
+            const extraSpecialistValue = remaining.reduce((sum, card) => {
+                return specialistNames.has(card.name) ? sum + card.value : sum;
+            }, 0);
+            const maxPotential = game.banks[player] + remainingTotal + extraSpecialistValue;
+            if (leaderScore <= maxPotential) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     function toggleAnnouncer() {
