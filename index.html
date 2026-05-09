@@ -172,12 +172,10 @@
             50% { transform: scale(1.05); }
         }
 
-        .screen {
-            display: none;
+        .screen:not(.active) {
+            display: none !important;
         }
-
         .screen.active {
-            display: block;
             animation: fadeIn 0.3s ease-in;
         }
 
@@ -393,11 +391,11 @@
         currentPlayerIndex: 0,
         specialistCards: {}, // playerName -> [ailment1, ailment2, ...]
         doctorDeck: [],
-        discardPile: [],
         currentAilment: null,
         banks: {},
         successfulCards: [],
-        gameActive: true
+        gameActive: true,
+        currentSpecialist: null
     };
 
     // Ailment Data
@@ -417,6 +415,9 @@
     ];
 
     function selectPlayers(num, evt) {
+        // Preserve any typed names
+        const existing = Array.from(document.querySelectorAll('#playerInputs input')).map(i => i.value.trim());
+
         // Update button selection
         document.querySelectorAll('.num-btn').forEach(btn => {
             btn.classList.remove('selected');
@@ -429,9 +430,11 @@
         const container = document.getElementById('playerInputs');
         container.innerHTML = '';
         for (let i = 0; i < num; i++) {
+            const val = (existing[i] && existing[i].length) ? existing[i] : `Player ${i + 1}`;
+            const safe = String(val).replace(/"/g, '&quot;');
             container.innerHTML += `
                 <div class="player-input">
-                    <input type="text" id="player${i}" placeholder="Player ${i + 1} Name" value="Player ${i + 1}">
+                    <input type="text" id="player${i}" placeholder="Player ${i + 1} Name" value="${safe}">
                 </div>
             `;
         }
@@ -439,7 +442,6 @@
     }
 
     function startGame() {
-        // Get player names
         const numPlayers = document.querySelectorAll('.num-btn.selected').length
             ? document.querySelectorAll('.num-btn.selected')[0].textContent
             : null;
@@ -451,17 +453,25 @@
 
         const num = parseInt(numPlayers);
         game.players = [];
+        game.banks = {};
+        const usedNames = new Set();
+
         for (let i = 0; i < num; i++) {
             const nameInput = document.getElementById(`player${i}`);
-            const name = nameInput ? nameInput.value.trim() || `Player ${i + 1}` : `Player ${i + 1}`;
+            let name = nameInput ? nameInput.value.trim() || `Player ${i + 1}` : `Player ${i + 1}`;
+            const base = name;
+            let suffix = 1;
+            while (usedNames.has(name)) {
+                suffix += 1;
+                name = `${base} ${suffix}`;
+            }
+            usedNames.add(name);
             game.players.push(name);
             game.banks[name] = 0;
         }
 
-        // Initialize game
         initializeGame();
 
-        // Show gameplay screen
         document.getElementById('setupScreen').classList.remove('active');
         document.getElementById('gameplayScreen').classList.add('active');
 
@@ -469,36 +479,32 @@
     }
 
     function initializeGame() {
-        // Shuffle ailments
-        const shuffledAilments = [...ailments].sort(() => Math.random() - 0.5);
+        // Strict deck separation: use two independent clones
+        const specialistPool = [...ailments].sort(() => Math.random() - 0.5);
+        const doctorPool = [...ailments].sort(() => Math.random() - 0.5);
 
-        // Deal specialist cards
+        // Deal specialist cards evenly (ignore remainders)
         game.specialistCards = {};
-        game.players.forEach(player => {
-            game.specialistCards[player] = [];
-        });
-
-        for (let i = 0; i < shuffledAilments.length; i++) {
-            const playerIndex = i % game.players.length;
-            if (playerIndex < game.players.length) {
-                game.specialistCards[game.players[playerIndex]].push(shuffledAilments[i]);
-            }
+        const perPlayer = Math.floor(specialistPool.length / game.players.length);
+        for (let p = 0; p < game.players.length; p++) {
+            const player = game.players[p];
+            const start = p * perPlayer;
+            game.specialistCards[player] = specialistPool.slice(start, start + perPlayer);
         }
 
-        // Create doctor deck
-        game.doctorDeck = [...shuffledAilments].sort(() => Math.random() - 0.5);
-        game.discardPile = [];
+        // Doctor deck always starts with 12 cards
+        game.doctorDeck = doctorPool;
         game.successfulCards = [];
         game.currentPlayerIndex = 0;
+        game.currentSpecialist = null;
+        game.currentAilment = null;
         game.gameActive = true;
     }
 
     function updateDisplay() {
-        // Update current player
         const currentPlayer = game.players[game.currentPlayerIndex];
         document.getElementById('currentPlayerName').textContent = currentPlayer;
 
-        // Update scoreboard
         const scoreboardItems = document.getElementById('scoreboardItems');
         scoreboardItems.innerHTML = '';
         game.players.forEach(player => {
@@ -513,11 +519,10 @@
             `;
         });
 
-        // Update cards remaining
-        const remaining = game.doctorDeck.length + game.discardPile.length;
+        // Cards remaining reflect physical pieces left on board
+        const remaining = ailments.length - game.successfulCards.length;
         document.getElementById('cardsRemaining').textContent = remaining;
 
-        // Reset UI state
         document.getElementById('ailmentDisplay').style.display = 'none';
         document.getElementById('actionButtons').style.display = 'none';
         document.getElementById('announcement').style.display = 'none';
@@ -526,25 +531,16 @@
 
     function drawCard() {
         if (game.doctorDeck.length === 0) {
-            // Reshuffle discard pile
-            game.doctorDeck = game.discardPile.sort(() => Math.random() - 0.5);
-            game.discardPile = [];
-        }
-
-        if (game.doctorDeck.length === 0) {
             endGame();
             return;
         }
 
-        // Draw card
         game.currentAilment = game.doctorDeck.pop();
 
-        // Display ailment
         document.getElementById('ailmentName').textContent = game.currentAilment.name;
         document.getElementById('ailmentValue').textContent = `$${game.currentAilment.value}`;
         document.getElementById('ailmentDisplay').style.display = 'block';
 
-        // Show action buttons
         document.getElementById('drawCardBtn').style.display = 'none';
         document.getElementById('actionButtons').style.display = 'block';
         document.getElementById('successFailedButtons').style.display = 'flex';
@@ -565,28 +561,26 @@
     }
 
     function operationFailed() {
-        const currentPlayer = game.players[game.currentPlayerIndex];
         const specialistPlayer = findSpecialistHolder(game.currentAilment);
 
         if (specialistPlayer) {
-            // Show specialist attempt
             document.getElementById('actionButtons').style.display = 'block';
             document.getElementById('successFailedButtons').style.display = 'none';
             document.getElementById('specialistButtons').style.display = 'flex';
             document.getElementById('announcement').style.display = 'block';
-            document.getElementById('announcement').textContent = 
+            document.getElementById('announcement').textContent =
                 `🎯 ${specialistPlayer} has the Specialist card!`;
-            
+
             game.currentSpecialist = specialistPlayer;
         } else {
-            // No specialist available
-            game.discardPile.push(game.currentAilment);
+            // No specialist available — return card to bottom of doctor deck
+            game.doctorDeck.unshift(game.currentAilment);
             document.getElementById('actionButtons').style.display = 'block';
             document.getElementById('successFailedButtons').style.display = 'none';
             document.getElementById('noSpecialistButton').style.display = 'block';
             document.getElementById('announcement').style.display = 'block';
-            document.getElementById('announcement').textContent = 
-                `❌ No specialist available! Card returned to deck.`;
+            document.getElementById('announcement').textContent =
+                `❌ No specialist available! Card returned to bottom of deck.`;
         }
     }
 
@@ -596,7 +590,6 @@
         game.banks[specialist] += doubleCash;
         game.successfulCards.push(game.currentAilment);
 
-        // Remove specialist card from specialist's deck
         const index = game.specialistCards[specialist].findIndex(
             card => card.name === game.currentAilment.name
         );
@@ -612,8 +605,7 @@
     }
 
     function specialistFailed() {
-        // Return card to bottom of doctor deck
-        game.discardPile.push(game.currentAilment);
+        game.doctorDeck.unshift(game.currentAilment);
         nextTurn();
     }
 
@@ -635,14 +627,12 @@
     }
 
     function endGame() {
-        // Calculate final standings
         const standings = game.players
             .map(player => ({ name: player, money: game.banks[player] }))
             .sort((a, b) => b.money - a.money);
 
         const winner = standings[0];
 
-        // Display final standings
         const standingsHtml = standings
             .map((s, index) => {
                 const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${index + 1}.`;
@@ -651,7 +641,7 @@
             .join('');
 
         document.getElementById('finalStandings').innerHTML = standingsHtml;
-        document.getElementById('winnerBadge').textContent = 
+        document.getElementById('winnerBadge').textContent =
             `🏆 ${winner.name} Wins! 🏆\n$${winner.money}`;
 
         document.getElementById('gameplayScreen').classList.remove('active');
