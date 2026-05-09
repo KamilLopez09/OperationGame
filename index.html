@@ -447,9 +447,8 @@
     let announcerEnabled = true;
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     const audioContext = new AudioCtx();
-    let jeopardyTimerIds = [];
-    let jeopardyOscillators = [];
-    let jeopardyPlaying = false;
+    const jeopardyAudio = new Audio('Jeopardy - QuickSounds.com.mp3');
+    jeopardyAudio.loop = true;
 
     // Timer state
     let timerEnabled = false;
@@ -623,11 +622,11 @@
         document.getElementById('specialistButtons').style.display = 'none';
         document.getElementById('noSpecialistButton').style.display = 'none';
 
-        startJeopardyMusic();
+        startCountdownMusic();
     }
 
     function operationSuccess() {
-        stopJeopardyMusic();
+        stopCountdownMusic();
         const currentPlayer = game.players[game.currentPlayerIndex];
         game.banks[currentPlayer] += game.currentAilment.value;
         game.successfulCards.push(game.currentAilment);
@@ -642,7 +641,7 @@
     }
 
     function operationFailed() {
-        stopJeopardyMusic();
+        stopCountdownMusic();
         const specialistPlayer = findSpecialistHolder(game.currentAilment);
 
         if (specialistPlayer) {
@@ -654,7 +653,7 @@
                 `🎯 ${specialistPlayer} has the Specialist card!`;
 
             game.currentSpecialist = specialistPlayer;
-            startJeopardyMusic();
+            startCountdownMusic();
         } else {
             // No specialist available — return card to bottom of doctor deck
             game.doctorDeck.unshift(game.currentAilment);
@@ -670,7 +669,7 @@
     }
 
     function specialistSuccess() {
-        stopJeopardyMusic();
+        stopCountdownMusic();
         const specialist = game.currentSpecialist;
         const doubleCash = game.currentAilment.value * 2;
         game.banks[specialist] += doubleCash;
@@ -693,7 +692,7 @@
     }
 
     function specialistFailed() {
-        stopJeopardyMusic();
+        stopCountdownMusic();
         game.doctorDeck.unshift(game.currentAilment);
         playBuzzerSound();
         stopTimer();
@@ -718,7 +717,7 @@
     }
 
     function endGame() {
-        stopJeopardyMusic();
+        stopCountdownMusic();
         stopTimer();
         playCheerSound();
         const standings = game.players
@@ -835,85 +834,16 @@
         });
     }
 
-    function noteToFreq(note) {
-        const map = {
-            'C4': 261.63,
-            'C#4': 277.18,
-            'D4': 293.66,
-            'E4': 329.63,
-            'F3': 174.61,
-            'F4': 349.23,
-            'G4': 392.0,
-            'A4': 440.0
-        };
-        return map[note] || 440.0;
-    }
-
-    function startJeopardyMusic() {
-        if (jeopardyPlaying) {
-            return;
+    function startCountdownMusic() {
+        const playPromise = jeopardyAudio.play();
+        if (playPromise && typeof playPromise.catch === 'function') {
+            playPromise.catch(() => {});
         }
-        const ctx = getAudioContext();
-        const sequence = [
-            'C4', 'F4', 'C4', 'F3',
-            'C4', 'F4', 'C4',
-            'C4', 'F4', 'C4', 'F4',
-            'A4', 'G4', 'F4', 'E4', 'D4', 'C#4'
-        ];
-        const stepMs = 280;
-        const scheduleLoop = () => {
-            sequence.forEach((note, i) => {
-                const id = setTimeout(() => {
-                    if (!jeopardyPlaying) {
-                        return;
-                    }
-                    const osc = ctx.createOscillator();
-                    const gain = ctx.createGain();
-                    osc.type = 'square';
-                    osc.frequency.value = noteToFreq(note);
-                    gain.gain.value = 0.06;
-                    osc.connect(gain);
-                    gain.connect(ctx.destination);
-                    const now = ctx.currentTime;
-                    gain.gain.setValueAtTime(0.0001, now);
-                    gain.gain.exponentialRampToValueAtTime(0.06, now + 0.01);
-                    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.2);
-                    osc.start(now);
-                    osc.stop(now + 0.22);
-                    jeopardyOscillators.push(osc);
-                }, i * stepMs);
-                jeopardyTimerIds.push(id);
-            });
-
-            const loopId = setTimeout(() => {
-                if (jeopardyPlaying) {
-                    scheduleLoop();
-                }
-            }, sequence.length * stepMs + 50);
-            jeopardyTimerIds.push(loopId);
-        };
-
-        jeopardyPlaying = true;
-        scheduleLoop();
     }
 
-    function stopJeopardyMusic() {
-        jeopardyPlaying = false;
-        jeopardyTimerIds.forEach(id => clearTimeout(id));
-        jeopardyTimerIds = [];
-        jeopardyOscillators.forEach(osc => {
-            try {
-                osc.stop();
-            } catch (e) {
-                // ignore stop errors for already-stopped oscillators
-            }
-            try {
-                osc.disconnect();
-            } catch (e) {
-                // ignore disconnect errors
-            }
-        });
-        jeopardyOscillators = [];
+    function stopCountdownMusic() {
+        jeopardyAudio.pause();
+        jeopardyAudio.currentTime = 0;
     }
 
     function startTimer() {
