@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Operation - Card Dealer & Scorekeeper</title>
+    <link href="https://cdn.tailwindcss.com" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&display=swap');
+
+        * {
+            font-family: 'Fredoka', sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ffd93d 50%, #ff6b6b 100%);
+            min-height: 100vh;
+        }
+
+        .game-card {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            padding: 40px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ff5252 100%);
+            transition: all 0.3s ease;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(255, 107, 107, 0.4);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #51cf66 0%, #40c057 100%);
+            transition: all 0.3s ease;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .btn-success:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(81, 207, 102, 0.4);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ff5252 100%);
+            transition: all 0.3s ease;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .btn-danger:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(255, 107, 107, 0.4);
+        }
+
+        .scoreboard {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+        }
+
+        .score-item {
+            padding: 12px 0;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 16px;
+        }
+
+        .score-item:last-child {
+            border-bottom: none;
+        }
+
+        .current-player {
+            background: linear-gradient(135deg, #ffd93d 0%, #ffb700 100%);
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: 700;
+            font-size: 13px;
+            color: #333;
+        }
+
+        .ailment-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 15px;
+            padding: 30px;
+            color: white;
+            text-align: center;
+            min-height: 200px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .ailment-name {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 20px;
+        }
+
+        .ailment-value {
+            font-size: 48px;
+            font-weight: 700;
+            color: #ffd93d;
+        }
+
+        .game-over-screen {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 20px;
+            padding: 60px 40px;
+            color: white;
+            text-align: center;
+        }
+
+        .winner-badge {
+            background: linear-gradient(135deg, #ffd93d 0%, #ffb700 100%);
+            color: #333;
+            padding: 20px 40px;
+            border-radius: 50px;
+            font-size: 28px;
+            font-weight: 700;
+            margin: 20px 0;
+            display: inline-block;
+        }
+
+        .final-standings {
+            background: rgba(255,255,255,0.1);
+            border-radius: 15px;
+            padding: 30px;
+            margin: 30px 0;
+            backdrop-filter: blur(10px);
+        }
+
+        .standing-item {
+            font-size: 24px;
+            padding: 15px;
+            margin: 10px 0;
+            background: rgba(255,255,255,0.1);
+            border-radius: 10px;
+        }
+
+        .standing-rank {
+            font-weight: 700;
+            color: #ffd93d;
+        }
+
+        .specialist-announcement {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ff5252 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 15px;
+            font-size: 20px;
+            font-weight: 700;
+            margin: 20px 0;
+            animation: pulse 0.6s ease-in-out;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+
+        .screen {
+            display: none;
+        }
+
+        .screen.active {
+            display: block;
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .player-input {
+            margin: 15px 0;
+        }
+
+        .player-input input {
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            font-size: 16px;
+            width: 100%;
+            max-width: 300px;
+            transition: border-color 0.3s ease;
+        }
+
+        .player-input input:focus {
+            outline: none;
+            border-color: #ff6b6b;
+        }
+
+        .num-players-selector {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+
+        .num-btn {
+            width: 50px;
+            height: 50px;
+            border-radius: 10px;
+            border: 2px solid #ccc;
+            background: white;
+            font-size: 18px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .num-btn:hover {
+            border-color: #ff6b6b;
+            background: #fff5f5;
+        }
+
+        .num-btn.selected {
+            background: #ff6b6b;
+            color: white;
+            border-color: #ff6b6b;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 30px;
+        }
+
+        .center-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        .game-container {
+            display: grid;
+            grid-template-columns: 1fr 250px;
+            gap: 20px;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .game-container {
+                grid-template-columns: 1fr;
+            }
+            .ailment-card {
+                min-height: 150px;
+            }
+            .ailment-name {
+                font-size: 24px;
+            }
+            .ailment-value {
+                font-size: 36px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Setup Screen -->
+<div id="setupScreen" class="screen active center-content">
+    <div class="game-card max-w-2xl">
+        <h1 class="text-5xl font-bold text-center mb-8" style="background: linear-gradient(135deg, #ff6b6b, #ffd93d); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">
+            🏥 OPERATION
+        </h1>
+        <p class="text-center text-xl text-gray-600 mb-8">Card Dealer & Scorekeeper</p>
+
+        <div class="mb-8">
+            <label class="block text-xl font-bold mb-4 text-center">How many players?</label>
+            <div class="num-players-selector">
+                <button class="num-btn" onclick="selectPlayers(2, event)">2</button>
+                <button class="num-btn" onclick="selectPlayers(3, event)">3</button>
+                <button class="num-btn" onclick="selectPlayers(4, event)">4</button>
+                <button class="num-btn" onclick="selectPlayers(5, event)">5</button>
+                <button class="num-btn" onclick="selectPlayers(6, event)">6</button>
+            </div>
+        </div>
+
+        <div id="playerNamesContainer" style="display: none;">
+            <p class="text-lg font-bold mb-4 text-center">Enter player names:</p>
+            <div id="playerInputs" class="mb-8"></div>
+            <button onclick="startGame()" class="btn-primary w-full py-4 px-6 rounded-lg text-white text-xl">
+                Start Game
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Gameplay Screen -->
+<div id="gameplayScreen" class="screen">
+    <div class="game-container">
+        <div>
+            <!-- Current Player Info -->
+            <div class="mb-6 game-card">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-3xl font-bold">Current Turn</h2>
+                    <div class="text-sm text-gray-600">Cards Remaining: <span id="cardsRemaining" class="font-bold text-xl">12</span></div>
+                </div>
+                <p class="text-2xl font-bold" id="currentPlayerName"></p>
+            </div>
+
+            <!-- Ailment Display -->
+            <div id="ailmentDisplay" class="ailment-card" style="display: none;">
+                <div class="ailment-name" id="ailmentName"></div>
+                <div class="ailment-value" id="ailmentValue"></div>
+            </div>
+
+            <!-- Draw Card Button -->
+            <button id="drawCardBtn" onclick="drawCard()" class="btn-primary w-full py-6 px-6 rounded-lg text-white text-xl font-bold mb-6" style="margin-top: 40px;">
+                🃏 Draw Doctor Card
+            </button>
+
+            <!-- Action Buttons -->
+            <div id="actionButtons" style="display: none;">
+                <div id="successFailedButtons" class="action-buttons">
+                    <button onclick="operationSuccess()" class="btn-success py-4 px-8 rounded-lg text-white text-lg flex-1">
+                        ✓ Successful Operation
+                    </button>
+                    <button onclick="operationFailed()" class="btn-danger py-4 px-8 rounded-lg text-white text-lg flex-1">
+                        ✗ Failed Operation
+                    </button>
+                </div>
+
+                <div id="specialistButtons" style="display: none;" class="action-buttons">
+                    <button onclick="specialistSuccess()" class="btn-success py-4 px-8 rounded-lg text-white text-lg flex-1">
+                        ✓ Specialist Success
+                    </button>
+                    <button onclick="specialistFailed()" class="btn-danger py-4 px-8 rounded-lg text-white text-lg flex-1">
+                        ✗ Specialist Failed
+                    </button>
+                </div>
+
+                <div id="noSpecialistButton" style="display: none;" class="action-buttons">
+                    <button onclick="nextTurn()" class="btn-primary py-4 px-8 rounded-lg text-white text-lg w-full">
+                        → Next Turn
+                    </button>
+                </div>
+            </div>
+
+            <!-- Announcement -->
+            <div id="announcement" style="display: none;" class="specialist-announcement"></div>
+        </div>
+
+        <!-- Scoreboard Sidebar -->
+        <div class="scoreboard sticky top-20 h-fit">
+            <h3 class="font-bold text-lg mb-4 text-center" style="color: #ff6b6b;">Scoreboard</h3>
+            <div id="scoreboardItems"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Game Over Screen -->
+<div id="gameOverScreen" class="screen center-content">
+    <div class="game-over-screen max-w-2xl">
+        <h1 class="text-5xl font-bold mb-6">🎉 GAME OVER 🎉</h1>
+        <p class="text-2xl mb-4">Final Standings</p>
+
+        <div class="final-standings" id="finalStandings"></div>
+
+        <div class="winner-badge" id="winnerBadge"></div>
+
+        <button onclick="location.reload()" class="btn-primary py-4 px-12 rounded-lg text-white text-xl font-bold mt-8">
+            Play Again
+        </button>
+    </div>
+</div>
+
+<script>
+    // Game State
+    const game = {
+        players: [],
+        currentPlayerIndex: 0,
+        specialistCards: {}, // playerName -> [ailment1, ailment2, ...]
+        doctorDeck: [],
+        discardPile: [],
+        currentAilment: null,
+        banks: {},
+        successfulCards: [],
+        gameActive: true
+    };
+
+    // Ailment Data
+    const ailments = [
+        { name: "Adam's Apple", value: 100 },
+        { name: "Broken Heart", value: 100 },
+        { name: "Wrenched Ankle", value: 100 },
+        { name: "Butterflies in Stomach", value: 500 },
+        { name: "Spare Ribs", value: 150 },
+        { name: "Water on the Knee", value: 150 },
+        { name: "Funny Bone", value: 200 },
+        { name: "Charlie Horse", value: 200 },
+        { name: "Writer's Cramp", value: 200 },
+        { name: "Ankle Bone Connected to the Knee Bone", value: 200 },
+        { name: "Wish Bone", value: 300 },
+        { name: "Bread Basket", value: 1000 }
+    ];
+
+    function selectPlayers(num, evt) {
+        // Update button selection
+        document.querySelectorAll('.num-btn').forEach(btn => {
+            btn.classList.remove('selected');
+        });
+        if (evt && evt.target) {
+            evt.target.classList.add('selected');
+        }
+
+        // Show player name inputs
+        const container = document.getElementById('playerInputs');
+        container.innerHTML = '';
+        for (let i = 0; i < num; i++) {
+            container.innerHTML += `
+                <div class="player-input">
+                    <input type="text" id="player${i}" placeholder="Player ${i + 1} Name" value="Player ${i + 1}">
+                </div>
+            `;
+        }
+        document.getElementById('playerNamesContainer').style.display = 'block';
+    }
+
+    function startGame() {
+        // Get player names
+        const numPlayers = document.querySelectorAll('.num-btn.selected').length
+            ? document.querySelectorAll('.num-btn.selected')[0].textContent
+            : null;
+
+        if (!numPlayers) {
+            alert('Please select number of players');
+            return;
+        }
+
+        const num = parseInt(numPlayers);
+        game.players = [];
+        for (let i = 0; i < num; i++) {
+            const nameInput = document.getElementById(`player${i}`);
+            const name = nameInput ? nameInput.value.trim() || `Player ${i + 1}` : `Player ${i + 1}`;
+            game.players.push(name);
+            game.banks[name] = 0;
+        }
+
+        // Initialize game
+        initializeGame();
+
+        // Show gameplay screen
+        document.getElementById('setupScreen').classList.remove('active');
+        document.getElementById('gameplayScreen').classList.add('active');
+
+        updateDisplay();
+    }
+
+    function initializeGame() {
+        // Shuffle ailments
+        const shuffledAilments = [...ailments].sort(() => Math.random() - 0.5);
+
+        // Deal specialist cards
+        game.specialistCards = {};
+        game.players.forEach(player => {
+            game.specialistCards[player] = [];
+        });
+
+        for (let i = 0; i < shuffledAilments.length; i++) {
+            const playerIndex = i % game.players.length;
+            if (playerIndex < game.players.length) {
+                game.specialistCards[game.players[playerIndex]].push(shuffledAilments[i]);
+            }
+        }
+
+        // Create doctor deck
+        game.doctorDeck = [...shuffledAilments].sort(() => Math.random() - 0.5);
+        game.discardPile = [];
+        game.successfulCards = [];
+        game.currentPlayerIndex = 0;
+        game.gameActive = true;
+    }
+
+    function updateDisplay() {
+        // Update current player
+        const currentPlayer = game.players[game.currentPlayerIndex];
+        document.getElementById('currentPlayerName').textContent = currentPlayer;
+
+        // Update scoreboard
+        const scoreboardItems = document.getElementById('scoreboardItems');
+        scoreboardItems.innerHTML = '';
+        game.players.forEach(player => {
+            const isCurrent = player === currentPlayer;
+            scoreboardItems.innerHTML += `
+                <div class="score-item">
+                    <span ${isCurrent ? 'class="current-player"' : ''}>
+                        ${player}
+                    </span>
+                    <span class="font-bold text-lg" style="color: #ff6b6b;">$${game.banks[player]}</span>
+                </div>
+            `;
+        });
+
+        // Update cards remaining
+        const remaining = game.doctorDeck.length + game.discardPile.length;
+        document.getElementById('cardsRemaining').textContent = remaining;
+
+        // Reset UI state
+        document.getElementById('ailmentDisplay').style.display = 'none';
+        document.getElementById('actionButtons').style.display = 'none';
+        document.getElementById('announcement').style.display = 'none';
+        document.getElementById('drawCardBtn').style.display = 'block';
+    }
+
+    function drawCard() {
+        if (game.doctorDeck.length === 0) {
+            // Reshuffle discard pile
+            game.doctorDeck = game.discardPile.sort(() => Math.random() - 0.5);
+            game.discardPile = [];
+        }
+
+        if (game.doctorDeck.length === 0) {
+            endGame();
+            return;
+        }
+
+        // Draw card
+        game.currentAilment = game.doctorDeck.pop();
+
+        // Display ailment
+        document.getElementById('ailmentName').textContent = game.currentAilment.name;
+        document.getElementById('ailmentValue').textContent = `$${game.currentAilment.value}`;
+        document.getElementById('ailmentDisplay').style.display = 'block';
+
+        // Show action buttons
+        document.getElementById('drawCardBtn').style.display = 'none';
+        document.getElementById('actionButtons').style.display = 'block';
+        document.getElementById('successFailedButtons').style.display = 'flex';
+        document.getElementById('specialistButtons').style.display = 'none';
+        document.getElementById('noSpecialistButton').style.display = 'none';
+    }
+
+    function operationSuccess() {
+        const currentPlayer = game.players[game.currentPlayerIndex];
+        game.banks[currentPlayer] += game.currentAilment.value;
+        game.successfulCards.push(game.currentAilment);
+
+        if (game.successfulCards.length === ailments.length) {
+            endGame();
+        } else {
+            nextTurn();
+        }
+    }
+
+    function operationFailed() {
+        const currentPlayer = game.players[game.currentPlayerIndex];
+        const specialistPlayer = findSpecialistHolder(game.currentAilment);
+
+        if (specialistPlayer) {
+            // Show specialist attempt
+            document.getElementById('actionButtons').style.display = 'block';
+            document.getElementById('successFailedButtons').style.display = 'none';
+            document.getElementById('specialistButtons').style.display = 'flex';
+            document.getElementById('announcement').style.display = 'block';
+            document.getElementById('announcement').textContent = 
+                `🎯 ${specialistPlayer} has the Specialist card!`;
+            
+            game.currentSpecialist = specialistPlayer;
+        } else {
+            // No specialist available
+            game.discardPile.push(game.currentAilment);
+            document.getElementById('actionButtons').style.display = 'block';
+            document.getElementById('successFailedButtons').style.display = 'none';
+            document.getElementById('noSpecialistButton').style.display = 'block';
+            document.getElementById('announcement').style.display = 'block';
+            document.getElementById('announcement').textContent = 
+                `❌ No specialist available! Card returned to deck.`;
+        }
+    }
+
+    function specialistSuccess() {
+        const specialist = game.currentSpecialist;
+        const doubleCash = game.currentAilment.value * 2;
+        game.banks[specialist] += doubleCash;
+        game.successfulCards.push(game.currentAilment);
+
+        // Remove specialist card from specialist's deck
+        const index = game.specialistCards[specialist].findIndex(
+            card => card.name === game.currentAilment.name
+        );
+        if (index > -1) {
+            game.specialistCards[specialist].splice(index, 1);
+        }
+
+        if (game.successfulCards.length === ailments.length) {
+            endGame();
+        } else {
+            nextTurn();
+        }
+    }
+
+    function specialistFailed() {
+        // Return card to bottom of doctor deck
+        game.discardPile.push(game.currentAilment);
+        nextTurn();
+    }
+
+    function findSpecialistHolder(ailment) {
+        for (let player of game.players) {
+            const hasCard = game.specialistCards[player].some(
+                card => card.name === ailment.name
+            );
+            if (hasCard) {
+                return player;
+            }
+        }
+        return null;
+    }
+
+    function nextTurn() {
+        game.currentPlayerIndex = (game.currentPlayerIndex + 1) % game.players.length;
+        updateDisplay();
+    }
+
+    function endGame() {
+        // Calculate final standings
+        const standings = game.players
+            .map(player => ({ name: player, money: game.banks[player] }))
+            .sort((a, b) => b.money - a.money);
+
+        const winner = standings[0];
+
+        // Display final standings
+        const standingsHtml = standings
+            .map((s, index) => {
+                const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${index + 1}.`;
+                return `<div class="standing-item"><span class="standing-rank">${medal} ${s.name}</span> - $${s.money}</div>`;
+            })
+            .join('');
+
+        document.getElementById('finalStandings').innerHTML = standingsHtml;
+        document.getElementById('winnerBadge').textContent = 
+            `🏆 ${winner.name} Wins! 🏆\n$${winner.money}`;
+
+        document.getElementById('gameplayScreen').classList.remove('active');
+        document.getElementById('gameOverScreen').classList.add('active');
+    }
+</script>
+
+</body>
+</html>
