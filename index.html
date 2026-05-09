@@ -258,6 +258,37 @@
             padding: 20px;
         }
 
+        .announcer-toggle {
+            position: fixed;
+            top: 16px;
+            right: 16px;
+            z-index: 50;
+            background: rgba(255, 255, 255, 0.9);
+            border: 2px solid #ff6b6b;
+            color: #333;
+            padding: 8px 12px;
+            border-radius: 999px;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .timer-bar {
+            background: rgba(255,255,255,0.75);
+            border-radius: 999px;
+            height: 12px;
+            overflow: hidden;
+            border: 2px solid #ffd93d;
+        }
+
+        .timer-fill {
+            height: 100%;
+            width: 100%;
+            background: linear-gradient(90deg, #51cf66 0%, #ffd93d 50%, #ff6b6b 100%);
+            transition: width 0.1s linear;
+        }
+
         @media (max-width: 768px) {
             .game-container {
                 grid-template-columns: 1fr;
@@ -275,6 +306,8 @@
     </style>
 </head>
 <body>
+
+<button id="announcerToggle" class="announcer-toggle" onclick="toggleAnnouncer()">🔈 Announcer On</button>
 
 <!-- Setup Screen -->
 <div id="setupScreen" class="screen active center-content">
@@ -295,6 +328,13 @@
             </div>
         </div>
 
+        <div class="mb-6 text-center">
+            <label class="text-lg font-semibold">
+                <input id="timerMode" type="checkbox" class="mr-2">
+                Enable Speed Run Timer (60s)
+            </label>
+        </div>
+
         <div id="playerNamesContainer" style="display: none;">
             <p class="text-lg font-bold mb-4 text-center">Enter player names:</p>
             <div id="playerInputs" class="mb-8"></div>
@@ -309,6 +349,11 @@
 <div id="gameplayScreen" class="screen">
     <div class="game-container">
         <div>
+            <!-- Timer Bar -->
+            <div id="timerBar" class="timer-bar mb-4" style="display: none;">
+                <div id="timerFill" class="timer-fill"></div>
+            </div>
+
             <!-- Current Player Info -->
             <div class="mb-6 game-card">
                 <div class="flex justify-between items-center mb-4">
@@ -398,6 +443,20 @@
         currentSpecialist: null
     };
 
+    // Announcer + audio
+    let announcerEnabled = true;
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    const audioContext = new AudioCtx();
+    let jeopardyTimerIds = [];
+    let jeopardyOscillators = [];
+    let jeopardyPlaying = false;
+
+    // Timer state
+    let timerEnabled = false;
+    let timerInterval = null;
+    let timerStartMs = 0;
+    const timerDurationMs = 60000;
+
     // Ailment Data
     const ailments = [
         { name: "Adam's Apple", value: 100 },
@@ -470,6 +529,12 @@
             game.banks[name] = 0;
         }
 
+        timerEnabled = Boolean(document.getElementById('timerMode')?.checked);
+
+        if (audioContext.state === 'suspended') {
+            audioContext.resume();
+        }
+
         initializeGame();
 
         document.getElementById('setupScreen').classList.remove('active');
@@ -499,6 +564,8 @@
         game.currentSpecialist = null;
         game.currentAilment = null;
         game.gameActive = true;
+        stopTimer();
+        updateTimerUI(1);
     }
 
     function updateDisplay() {
@@ -523,10 +590,16 @@
         const remaining = ailments.length - game.successfulCards.length;
         document.getElementById('cardsRemaining').textContent = remaining;
 
+        // Announce new turn
+        announceTurn(currentPlayer);
+
         document.getElementById('ailmentDisplay').style.display = 'none';
         document.getElementById('actionButtons').style.display = 'none';
         document.getElementById('announcement').style.display = 'none';
         document.getElementById('drawCardBtn').style.display = 'block';
+
+        // Timer bar visibility
+        document.getElementById('timerBar').style.display = timerEnabled ? 'block' : 'none';
     }
 
     function drawCard() {
@@ -541,17 +614,25 @@
         document.getElementById('ailmentValue').textContent = `$${game.currentAilment.value}`;
         document.getElementById('ailmentDisplay').style.display = 'block';
 
+        announceDraw(game.currentAilment);
+        startTimer();
+
         document.getElementById('drawCardBtn').style.display = 'none';
         document.getElementById('actionButtons').style.display = 'block';
         document.getElementById('successFailedButtons').style.display = 'flex';
         document.getElementById('specialistButtons').style.display = 'none';
         document.getElementById('noSpecialistButton').style.display = 'none';
+
+        startJeopardyMusic();
     }
 
     function operationSuccess() {
+        stopJeopardyMusic();
         const currentPlayer = game.players[game.currentPlayerIndex];
         game.banks[currentPlayer] += game.currentAilment.value;
         game.successfulCards.push(game.currentAilment);
+        playCashSound();
+        stopTimer();
 
         if (game.successfulCards.length === ailments.length) {
             endGame();
@@ -561,6 +642,7 @@
     }
 
     function operationFailed() {
+        stopJeopardyMusic();
         const specialistPlayer = findSpecialistHolder(game.currentAilment);
 
         if (specialistPlayer) {
@@ -572,9 +654,12 @@
                 `🎯 ${specialistPlayer} has the Specialist card!`;
 
             game.currentSpecialist = specialistPlayer;
+            startJeopardyMusic();
         } else {
             // No specialist available — return card to bottom of doctor deck
             game.doctorDeck.unshift(game.currentAilment);
+            playBuzzerSound();
+            stopTimer();
             document.getElementById('actionButtons').style.display = 'block';
             document.getElementById('successFailedButtons').style.display = 'none';
             document.getElementById('noSpecialistButton').style.display = 'block';
@@ -585,10 +670,13 @@
     }
 
     function specialistSuccess() {
+        stopJeopardyMusic();
         const specialist = game.currentSpecialist;
         const doubleCash = game.currentAilment.value * 2;
         game.banks[specialist] += doubleCash;
         game.successfulCards.push(game.currentAilment);
+        playCashSound();
+        stopTimer();
 
         const index = game.specialistCards[specialist].findIndex(
             card => card.name === game.currentAilment.name
@@ -605,7 +693,10 @@
     }
 
     function specialistFailed() {
+        stopJeopardyMusic();
         game.doctorDeck.unshift(game.currentAilment);
+        playBuzzerSound();
+        stopTimer();
         nextTurn();
     }
 
@@ -627,6 +718,9 @@
     }
 
     function endGame() {
+        stopJeopardyMusic();
+        stopTimer();
+        playCheerSound();
         const standings = game.players
             .map(player => ({ name: player, money: game.banks[player] }))
             .sort((a, b) => b.money - a.money);
@@ -646,6 +740,213 @@
 
         document.getElementById('gameplayScreen').classList.remove('active');
         document.getElementById('gameOverScreen').classList.add('active');
+    }
+
+    function toggleAnnouncer() {
+        announcerEnabled = !announcerEnabled;
+        const btn = document.getElementById('announcerToggle');
+        btn.textContent = announcerEnabled ? '🔈 Announcer On' : '🔇 Announcer Off';
+        if (!announcerEnabled) {
+            window.speechSynthesis.cancel();
+        }
+    }
+
+    function speak(text) {
+        if (!announcerEnabled || !('speechSynthesis' in window)) {
+            return;
+        }
+        window.speechSynthesis.cancel();
+        const utter = new SpeechSynthesisUtterance(text);
+        utter.rate = 1.0;
+        utter.pitch = 1.0;
+        window.speechSynthesis.speak(utter);
+    }
+
+    function announceTurn(player) {
+        if (!game.gameActive || !player) {
+            return;
+        }
+        speak(`It is ${player}'s turn.`);
+    }
+
+    function announceDraw(ailment) {
+        if (!ailment) {
+            return;
+        }
+        speak(`Remove the ${ailment.name} for ${ailment.value} dollars.`);
+    }
+
+    function getAudioContext() {
+        if (audioContext.state === 'suspended') {
+            audioContext.resume();
+        }
+        return audioContext;
+    }
+
+    function playTone(freq, durationMs, type, gainValue, startTime) {
+        const ctx = getAudioContext();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = type;
+        osc.frequency.value = freq;
+        gain.gain.value = gainValue;
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        const t = startTime || ctx.currentTime;
+        gain.gain.setValueAtTime(0.0001, t);
+        gain.gain.exponentialRampToValueAtTime(gainValue, t + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + durationMs / 1000);
+        osc.start(t);
+        osc.stop(t + durationMs / 1000 + 0.02);
+    }
+
+    function playCashSound() {
+        const ctx = getAudioContext();
+        const now = ctx.currentTime;
+        const notes = [880, 1175, 1480];
+        notes.forEach((freq, i) => {
+            playTone(freq, 140, 'triangle', 0.08, now + i * 0.08);
+        });
+    }
+
+    function playBuzzerSound() {
+        const ctx = getAudioContext();
+        const now = ctx.currentTime;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.value = 140;
+        gain.gain.value = 0.12;
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.linearRampToValueAtTime(0.12, now + 0.02);
+        gain.gain.linearRampToValueAtTime(0.0001, now + 0.35);
+        osc.start(now);
+        osc.stop(now + 0.4);
+    }
+
+    function playCheerSound() {
+        const ctx = getAudioContext();
+        const now = ctx.currentTime;
+        const notes = [523.25, 659.25, 783.99, 1046.5];
+        notes.forEach((freq, i) => {
+            playTone(freq, 180, 'sine', 0.07, now + i * 0.12);
+        });
+    }
+
+    function noteToFreq(note) {
+        const map = {
+            'C4': 261.63,
+            'C#4': 277.18,
+            'D4': 293.66,
+            'E4': 329.63,
+            'F3': 174.61,
+            'F4': 349.23,
+            'G4': 392.0,
+            'A4': 440.0
+        };
+        return map[note] || 440.0;
+    }
+
+    function startJeopardyMusic() {
+        if (jeopardyPlaying) {
+            return;
+        }
+        const ctx = getAudioContext();
+        const sequence = [
+            'C4', 'F4', 'C4', 'F3',
+            'C4', 'F4', 'C4',
+            'C4', 'F4', 'C4', 'F4',
+            'A4', 'G4', 'F4', 'E4', 'D4', 'C#4'
+        ];
+        const stepMs = 280;
+        const scheduleLoop = () => {
+            sequence.forEach((note, i) => {
+                const id = setTimeout(() => {
+                    if (!jeopardyPlaying) {
+                        return;
+                    }
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = 'square';
+                    osc.frequency.value = noteToFreq(note);
+                    gain.gain.value = 0.06;
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    const now = ctx.currentTime;
+                    gain.gain.setValueAtTime(0.0001, now);
+                    gain.gain.exponentialRampToValueAtTime(0.06, now + 0.01);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.2);
+                    osc.start(now);
+                    osc.stop(now + 0.22);
+                    jeopardyOscillators.push(osc);
+                }, i * stepMs);
+                jeopardyTimerIds.push(id);
+            });
+
+            const loopId = setTimeout(() => {
+                if (jeopardyPlaying) {
+                    scheduleLoop();
+                }
+            }, sequence.length * stepMs + 50);
+            jeopardyTimerIds.push(loopId);
+        };
+
+        jeopardyPlaying = true;
+        scheduleLoop();
+    }
+
+    function stopJeopardyMusic() {
+        jeopardyPlaying = false;
+        jeopardyTimerIds.forEach(id => clearTimeout(id));
+        jeopardyTimerIds = [];
+        jeopardyOscillators.forEach(osc => {
+            try {
+                osc.stop();
+            } catch (e) {
+                // ignore stop errors for already-stopped oscillators
+            }
+            try {
+                osc.disconnect();
+            } catch (e) {
+                // ignore disconnect errors
+            }
+        });
+        jeopardyOscillators = [];
+    }
+
+    function startTimer() {
+        if (!timerEnabled) {
+            return;
+        }
+        stopTimer();
+        timerStartMs = Date.now();
+        updateTimerUI(1);
+        timerInterval = setInterval(() => {
+            const elapsed = Date.now() - timerStartMs;
+            const remaining = Math.max(0, timerDurationMs - elapsed);
+            const ratio = remaining / timerDurationMs;
+            updateTimerUI(ratio);
+            if (remaining <= 0) {
+                stopTimer();
+                operationFailed();
+            }
+        }, 100);
+    }
+
+    function stopTimer() {
+        if (timerInterval) {
+            clearInterval(timerInterval);
+            timerInterval = null;
+        }
+    }
+
+    function updateTimerUI(ratio) {
+        const fill = document.getElementById('timerFill');
+        if (fill) {
+            fill.style.width = `${Math.max(0, Math.min(1, ratio)) * 100}%`;
+        }
     }
 </script>
 
